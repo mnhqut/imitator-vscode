@@ -1,0 +1,7 @@
+var x : clock;
+automaton a
+actions: b;
+loc l1: invariant x <= 2
+	when True sync c goto l3;
+end
+init := { discrete = loc[a] := l1; continuous = x = 0; }

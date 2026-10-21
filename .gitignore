@@ -1,0 +1,5 @@
+node_modules/
+.vscode-test/
+*.vsix
+development_log.md
+question.md

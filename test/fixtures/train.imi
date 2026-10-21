@@ -1,0 +1,47 @@
+var
+	xt, xg : clock;
+	nb_cross : int;
+	p_approach, p_lower : parameter;
+	MAX_CROSS = 3 : int;
+
+function succ(i : int) : int
+begin
+	var j : int = i + 1;
+	return j
+end
+
+automaton train
+actions: approach, enter, leave;
+loc far: invariant True
+	when nb_cross < MAX_CROSS sync approach do {xt := 0} goto near;
+loc near: invariant xt <= 2 * p_approach
+	when xt >= p_approach sync enter goto crossing;
+loc crossing: invariant xt <= 2 * p_approach + 5
+	when True sync leave do {nb_cross := succ(nb_cross)} goto far;
+end
+
+automaton gate
+actions: approach, lower_done, leave;
+loc up: invariant True
+	when True sync approach do {xg := 0} goto lowering;
+loc lowering: invariant xg <= p_lower
+	when True sync lower_done goto down;
+loc down: invariant True
+	when True sync leave goto up;
+end
+
+automaton observer
+actions: enter, lower_done;
+loc obs_wait: invariant True
+	when True sync lower_done goto obs_ok;
+	when True sync enter goto obs_bad;
+loc obs_ok: invariant True
+	when True sync enter goto obs_wait;
+loc obs_bad: invariant True
+end
+
+init := {
+	discrete = loc[train] := far, loc[gate] := up, loc[observer] := obs_wait, nb_cross := 0;
+	continuous = xt = 0 & xg = 0 & p_approach >= 0 & p_lower >= 0;
+}
+end

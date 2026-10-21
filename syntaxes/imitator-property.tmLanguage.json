@@ -1,0 +1,51 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "IMITATOR property",
+	"scopeName": "source.imitator-property",
+	"patterns": [
+		{ "include": "source.imitator#comment" },
+		{ "include": "#synthesis-type" },
+		{ "include": "#property-keywords" },
+		{ "include": "#pattern-keywords" },
+		{ "include": "#timed-interval" },
+		{ "include": "source.imitator#loc-access" },
+		{ "include": "#keywords" },
+		{ "include": "source.imitator#constants" },
+		{ "include": "source.imitator#numbers" },
+		{ "include": "source.imitator#operators" }
+	],
+	"repository": {
+		"synthesis-type": {
+			"match": "#(synth|witness|exhibit|exemplify|exemplification)\\b",
+			"name": "keyword.control.directive.imitator-property"
+		},
+		"property-keywords": {
+			"match": "\\b(EF|AF|AG|AGnot|EFpmin|EFpmax|EFtmin|E|A|U|R|W|EF_|AF_|U_|R_|W_|Cycle|Loop|CycleThrough|LoopThrough|AcceptingCycle|AccCycle|AcceptingLoop|AccLoop|NZCycle|DeadlockFree|Valid|IM|IMK|IMunion|IMconvex|InverseMethod|TracePreservation|BCcover|BClearn|BCshuffle|BCborder|BCrandom|BCrandomseq|PRP|PRPC|Win)\\b",
+			"name": "support.function.property.imitator-property"
+		},
+		"pattern-keywords": {
+			"match": "\\b(pattern|always|before|eventually|everytime|happened|has|if|then|next|once|sequence|within|step)\\b",
+			"name": "keyword.other.pattern.imitator-property"
+		},
+		"timed-interval": {
+			"match": "\\b(inf|infinity)\\b",
+			"name": "constant.language.infinity.imitator-property"
+		},
+		"keywords": {
+			"patterns": [
+				{
+					"match": "\\b(property|projectresult)\\b",
+					"name": "storage.type.section.imitator-property"
+				},
+				{
+					"match": "\\b(and|or|not|is|in|accepting)\\b",
+					"name": "keyword.operator.word.imitator-property"
+				},
+				{
+					"match": "\\b(loc|list|stack|queue)\\b",
+					"name": "storage.modifier.imitator-property"
+				}
+			]
+		}
+	}
+}

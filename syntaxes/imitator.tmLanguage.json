@@ -1,0 +1,165 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "IMITATOR model",
+	"scopeName": "source.imitator",
+	"patterns": [
+		{ "include": "#comment" },
+		{ "include": "#include" },
+		{ "include": "#declarations" },
+		{ "include": "#location" },
+		{ "include": "#transition-target" },
+		{ "include": "#loc-access" },
+		{ "include": "#keywords" },
+		{ "include": "#types" },
+		{ "include": "#constants" },
+		{ "include": "#numbers" },
+		{ "include": "#function-call" },
+		{ "include": "#operators" },
+		{ "include": "#flow-derivative" }
+	],
+	"repository": {
+		"comment": {
+			"name": "comment.block.imitator",
+			"begin": "\\(\\*",
+			"end": "\\*\\)",
+			"patterns": [ { "include": "#comment" } ]
+		},
+		"include": {
+			"match": "(#include)\\s*(\"[^\"]*\")",
+			"captures": {
+				"1": { "name": "keyword.control.directive.include.imitator" },
+				"2": { "name": "string.quoted.double.include.imitator" }
+			}
+		},
+		"declarations": {
+			"patterns": [
+				{
+					"match": "\\b(automaton|template)\\s+([a-zA-Z][a-zA-Z0-9_]*)",
+					"captures": {
+						"1": { "name": "storage.type.automaton.imitator" },
+						"2": { "name": "entity.name.type.automaton.imitator" }
+					}
+				},
+				{
+					"match": "\\b(function|fn)\\s+([a-zA-Z][a-zA-Z0-9_]*)",
+					"captures": {
+						"1": { "name": "storage.type.function.imitator" },
+						"2": { "name": "entity.name.function.imitator" }
+					}
+				},
+				{
+					"match": "\\b(instantiate)\\s+([a-zA-Z][a-zA-Z0-9_]*)\\s*(:=)\\s*([a-zA-Z][a-zA-Z0-9_]*)",
+					"captures": {
+						"1": { "name": "storage.type.instantiate.imitator" },
+						"2": { "name": "entity.name.type.automaton.imitator" },
+						"3": { "name": "keyword.operator.assignment.imitator" },
+						"4": { "name": "entity.name.type.template.imitator" }
+					}
+				},
+				{
+					"match": "\\b(var|init|actions|synclabs|controllable|uncontrollable|discrete(?=\\s*=)|continuous)\\b",
+					"name": "storage.type.section.imitator"
+				}
+			]
+		},
+		"location": {
+			"match": "\\b((?:(?:urgent|accepting)\\s+)*)(loc)\\s+([a-zA-Z][a-zA-Z0-9_]*)\\s*(?=:)",
+			"captures": {
+				"1": { "name": "storage.modifier.imitator" },
+				"2": { "name": "storage.type.location.imitator" },
+				"3": { "name": "entity.name.section.location.imitator" }
+			}
+		},
+		"transition-target": {
+			"patterns": [
+				{
+					"match": "\\b(goto)\\s+([a-zA-Z][a-zA-Z0-9_]*)",
+					"captures": {
+						"1": { "name": "keyword.control.goto.imitator" },
+						"2": { "name": "entity.name.section.location.imitator" }
+					}
+				},
+				{
+					"match": "\\b(sync)\\s+([a-zA-Z][a-zA-Z0-9_]*)",
+					"captures": {
+						"1": { "name": "keyword.control.sync.imitator" },
+						"2": { "name": "entity.name.label.action.imitator" }
+					}
+				}
+			]
+		},
+		"loc-access": {
+			"match": "\\b(loc)\\s*(\\[)\\s*([a-zA-Z][a-zA-Z0-9_]*)\\s*(\\])",
+			"captures": {
+				"1": { "name": "storage.type.location.imitator" },
+				"2": { "name": "punctuation.section.brackets.imitator" },
+				"3": { "name": "entity.name.type.automaton.imitator" },
+				"4": { "name": "punctuation.section.brackets.imitator" }
+			}
+		},
+		"keywords": {
+			"patterns": [
+				{
+					"match": "\\b(when|goto|sync|do|if|then|else|for|from|to|downto|while|done|return|begin|end)\\b",
+					"name": "keyword.control.imitator"
+				},
+				{
+					"match": "\\b(invariant|stop|flow|wait|urgent|accepting|loc|instantiate)\\b",
+					"name": "storage.modifier.imitator"
+				},
+				{
+					"match": "\\b(not|inside|is|in)\\b",
+					"name": "keyword.operator.word.imitator"
+				},
+				{
+					"match": "\\b(automatically_generated_observer|automatically_generated_x_obs|nosync_obs|special_0_clock)\\b",
+					"name": "invalid.illegal.reserved.imitator"
+				}
+			]
+		},
+		"types": {
+			"match": "\\b(clock|parameter|constant|int|rat|rational|discrete|bool|binary|array|list|stack|queue|void|action)\\b",
+			"name": "support.type.imitator"
+		},
+		"constants": {
+			"match": "\\b(True|False|inf|infinity)\\b",
+			"name": "constant.language.imitator"
+		},
+		"numbers": {
+			"patterns": [
+				{ "match": "\\b0b[01]+\\b", "name": "constant.numeric.binary.imitator" },
+				{ "match": "(?<![a-zA-Z0-9_])[0-9]*\\.[0-9]+\\b", "name": "constant.numeric.float.imitator" },
+				{ "match": "(?<![a-zA-Z0-9_])[0-9]+(?![0-9.])", "name": "constant.numeric.integer.imitator" }
+			]
+		},
+		"function-call": {
+			"patterns": [
+				{
+					"match": "\\b(rational_of_int|pow|int_div|mod|shift_left|shift_right|fill_left|fill_right|logand|logor|logxor|lognot|array_copy|array_append|array_length|array_mem|list_cons|list_hd|list_tl|list_rev|list_length|list_mem|list_is_empty|stack_push|stack_pop|stack_clear|stack_top|stack_copy|stack_length|stack_is_empty|queue_push|queue_pop|queue_clear|queue_top|queue_copy|queue_length|queue_is_empty)\\s*(?=\\()",
+					"name": "support.function.builtin.imitator"
+				},
+				{
+					"match": "\\b([a-zA-Z][a-zA-Z0-9_]*)\\s*(?=\\()",
+					"name": "entity.name.function.call.imitator"
+				}
+			]
+		},
+		"operators": {
+			"patterns": [
+				{ "match": ":=", "name": "keyword.operator.assignment.imitator" },
+				{ "match": "<=|>=|<>|<|>|=(?!>)", "name": "keyword.operator.comparison.imitator" },
+				{ "match": "&&|\\|\\||&|\\||=>", "name": "keyword.operator.logical.imitator" },
+				{ "match": "[-+*/]", "name": "keyword.operator.arithmetic.imitator" },
+				{ "match": "\\.\\.", "name": "keyword.operator.range.imitator" },
+				{ "match": "[;,]", "name": "punctuation.separator.imitator" }
+			]
+		},
+		"flow-derivative": {
+			"match": "\\b([a-zA-Z][a-zA-Z0-9_]*)(')",
+			"captures": {
+				"1": { "name": "variable.other.clock.imitator" },
+				"2": { "name": "keyword.operator.derivative.imitator" }
+			}
+		}
+	}
+}

@@ -1,0 +1,85 @@
+{
+	"name": "imitator-language",
+	"displayName": "IMITATOR Language Support",
+	"description": "Syntax highlighting, snippets, outline, completion, navigation and diagnostics for IMITATOR models (.imi) and properties (.imiprop)",
+	"version": "0.1.0",
+	"publisher": "imitator-model-checker",
+	"license": "GPL-3.0",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/imitator-model-checker/imitator",
+		"directory": "vscode-imitator"
+	},
+	"engines": {
+		"vscode": "^1.75.0"
+	},
+	"categories": [
+		"Programming Languages",
+		"Snippets"
+	],
+	"main": "./src/extension.js",
+	"activationEvents": [],
+	"contributes": {
+		"languages": [
+			{
+				"id": "imitator",
+				"aliases": [
+					"IMITATOR model",
+					"imitator"
+				],
+				"extensions": [
+					".imi"
+				],
+				"configuration": "./language-configuration.json"
+			},
+			{
+				"id": "imitator-property",
+				"aliases": [
+					"IMITATOR property",
+					"imiprop"
+				],
+				"extensions": [
+					".imiprop"
+				],
+				"configuration": "./language-configuration-property.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "imitator",
+				"scopeName": "source.imitator",
+				"path": "./syntaxes/imitator.tmLanguage.json"
+			},
+			{
+				"language": "imitator-property",
+				"scopeName": "source.imitator-property",
+				"path": "./syntaxes/imitator-property.tmLanguage.json"
+			}
+		],
+		"snippets": [
+			{
+				"language": "imitator",
+				"path": "./snippets/imitator.json"
+			},
+			{
+				"language": "imitator-property",
+				"path": "./snippets/imitator-property.json"
+			}
+		],
+		"configuration": {
+			"title": "IMITATOR",
+			"properties": {
+				"imitator.executablePath": {
+					"type": "string",
+					"default": "imitator",
+					"description": "Path to the imitator binary, used to check models on save (`-mode checksyntax`)."
+				},
+				"imitator.checkOnSave": {
+					"type": "boolean",
+					"default": true,
+					"description": "Run `imitator <file> -mode checksyntax` when a model is saved and report its errors and warnings."
+				}
+			}
+		}
+	}
+}

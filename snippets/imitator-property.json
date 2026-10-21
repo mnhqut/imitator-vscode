@@ -1,0 +1,57 @@
+{
+	"Property": {
+		"prefix": "property",
+		"body": "property := #${1|synth,witness,exemplify|} ${2|EF,AGnot,AG,AF,EFpmin,EFpmax,EFtmin,CycleThrough|}(${3:loc[pta] = l});$0"
+	},
+	"Reachability": {
+		"prefix": "EF",
+		"body": "property := #synth EF(loc[${1:pta}] = ${2:l});"
+	},
+	"Safety": {
+		"prefix": "AGnot",
+		"body": "property := #synth AGnot(loc[${1:observer}] = ${2:bad});"
+	},
+	"Parameter minimization": {
+		"prefix": "EFpmin",
+		"body": "property := #synth EFpmin(loc[${1:pta}] = ${2:l}, ${3:p});"
+	},
+	"Minimal time": {
+		"prefix": "EFtmin",
+		"description": "Requires a clock named global_time",
+		"body": "property := #synth EFtmin(loc[${1:pta}] = ${2:l});"
+	},
+	"Timed reachability": {
+		"prefix": "EF_",
+		"description": "Requires a clock named global_time",
+		"body": "property := #synth EF_[${1:0}, ${2:p}](loc[${3:pta}] = ${4:l});"
+	},
+	"Until": {
+		"prefix": "until",
+		"body": "property := #synth ${1|E,A|}(${2:sp1}) ${3|U,R,W|} (${4:sp2});"
+	},
+	"Accepting cycle": {
+		"prefix": "CycleThrough",
+		"body": "property := #synth CycleThrough(${1:accepting});"
+	},
+	"Inverse method": {
+		"prefix": "IM",
+		"body": "property := #synth IM(${1:p1 = 1}, ${2:p2 = 2});"
+	},
+	"Behavioral cartography": {
+		"prefix": "BCcover",
+		"body": [
+			"property := #synth BCcover(",
+			"\t& ${1:p1} = ${2:0}..${3:10}",
+			"\t& ${4:p2} = ${5:0}..${6:10}",
+			");"
+		]
+	},
+	"Pattern": {
+		"prefix": "pattern",
+		"body": "property := #synth pattern(${1|if a1 then eventually a2 within 5,everytime a1 then eventually a2 within 5,if a2 then a1 has happened before,a within 5,sequence a1\\, a2,always sequence a1\\, a2|});"
+	},
+	"Project result": {
+		"prefix": "projectresult",
+		"body": "projectresult(${1:p1}, ${2:p2});"
+	}
+}
