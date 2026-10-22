@@ -43,6 +43,9 @@ const BUILTINS = new Set([
 	'queue_push', 'queue_pop', 'queue_clear', 'queue_top', 'queue_copy', 'queue_length', 'queue_is_empty',
 ]);
 
+// Names reserved by ModelLexer.mll (used internally by IMITATOR)
+const RESERVED = new Set(['automatically_generated_observer', 'automatically_generated_x_obs', 'nosync_obs', 'special_0_clock']);
+
 // Section starters: used to re-synchronize after a syntax error
 const TOP_KEYWORDS = new Set(['var', 'function', 'fn', 'template', 'automaton', 'instantiate', 'init']);
 
@@ -138,8 +141,11 @@ function tokenize(text, keywords) {
  * Symbol keys (identity used for definition/references):
  *   var:x  fun:f  local:f/x  auto:a  tpl:t  tparam:t/x  loc:a/l  act:a
  * For an instantiated automaton, locations resolve to the template: loc:<template>/l
+ *
+ * scanModel only collects declarations and unresolved references of ONE file;
+ * analyzeModel adds the #included files and resolves the references.
  */
-function analyzeModel(text) {
+function scanModel(text) {
 	const { tokens, comments, errors } = tokenize(text, MODEL_KEYWORDS);
 	const n = tokens.length;
 	let p = 0;
@@ -151,6 +157,7 @@ function analyzeModel(text) {
 	const diagnostics = errors.map(e => Object.assign({ severity: 'error' }, e));
 	const automata = new Map();  // name -> {locScope, actions:Set, templateOf?}
 	const includes = [];
+	let init = null;             // init section info (quick fixes)
 
 	const tok = (k = 0) => tokens[p + k];
 	const is = (text, k = 0) => tokens[p + k] !== undefined && tokens[p + k].text === text && tokens[p + k].type !== 'name';
@@ -334,6 +341,7 @@ function analyzeModel(text) {
 			if (is(')')) p++;
 			sym.detail = `(${sig.join(', ')})`;
 		}
+		info.headerEnd = lastEnd();
 		if (!isTemplate) automata.set(aname, info);
 		else info.template = true, templates.set(aname, info);
 
@@ -348,6 +356,8 @@ function analyzeModel(text) {
 				switch (t.text) {
 					case 'actions':
 					case 'synclabs':
+						if (t.text === 'synclabs')
+							diagnostics.push({ start: t.start, end: t.end, severity: 'warning', code: 'deprecated-synclabs', message: '`synclabs` is deprecated since IMITATOR 3.4: use `actions`.' });
 						p++;
 						if (is(':')) p++;
 						while (p < n && !is(';') && !atTop() && !is('loc')) {
@@ -362,8 +372,13 @@ function analyzeModel(text) {
 							}
 							p++;
 						}
-						if (is(';')) p++;
+						if (is(';')) { info.actionsSemicolon = tok().start; p++; }
 						continue;
+					case 'while':
+						// At brace depth 0, `while` can only be the deprecated form of `invariant`
+						if (braceDepth === 0)
+							diagnostics.push({ start: t.start, end: t.end, severity: 'warning', code: 'deprecated-while', message: '`while` is deprecated in a location: use `invariant`.' });
+						break;
 					case 'urgent':
 					case 'accepting':
 					case 'loc': {
@@ -401,6 +416,7 @@ function analyzeModel(text) {
 			p++;
 		}
 		closeLoc();
+		info.endStart = is('end') ? tok().start : lastEnd();
 		if (is('end')) p++;
 		else diagnostics.push({ start: sym.nameStart, end: sym.nameEnd, severity: 'error', message: `Missing \`end\` for ${isTemplate ? 'template' : 'automaton'} \`${aname}\`.` });
 		sym.end = lastEnd();
@@ -429,18 +445,36 @@ function analyzeModel(text) {
 		const start = tok().start;
 		const sym = { key: null, name: 'init', kind: 'init', detail: 'initial state', nameStart: tok().start, nameEnd: tok().end, start, end: tok().end, children: [] };
 		symbols.push(sym);
+		const info = { start, keywordEnd: tok().end, assigned: new Set(), conjuncts: [], discreteAt: null, braceAt: null };
+		init = info;
 		p++;
 		if (is(':=')) p++;
 		const braced = is('{');
-		if (braced) p++;
+		info.style = braced ? 'new' : 'old';
+		if (braced) { info.braceAt = tok().end; p++; }
+		// Old style: split the conjunction at depth-0 `&`
+		let depth = 0, conjStart = p;
+		const closeConjunct = () => {
+			let i = conjStart, j = p - 1;
+			// Strip parentheses around the whole conjunct: ( loc[A] = l )
+			while (j > i && tokens[i].text === '(' && tokens[j].text === ')' && matching(i) === j) { i++; j--; }
+			if (j >= i) info.conjuncts.push(tokens.slice(i, j + 1));
+		};
 		while (p < n) {
 			if (braced && is('}')) { p++; break; }
-			if (!braced && is(';')) { p++; break; }
+			if (!braced && depth === 0 && is(';')) { closeConjunct(); info.end = tok().end; p++; break; }
 			if (is('end') || atTop()) break;
+			if (!braced) {
+				if (is('(') || is('[')) depth++;
+				else if (is(')') || is(']')) depth--;
+				else if (depth === 0 && (is('&') || is('&&'))) { closeConjunct(); p++; conjStart = p; continue; }
+			}
+			if (braced && is('discrete') && is('=', 1)) { info.discreteAt = tok(1).end; p += 2; continue; }
 			if (is('loc') && is('[', 1) && isName(2)) {
 				// loc[A] := l   /   loc[A] = l
 				const at = tok(2);
 				ref(at, { ctx: 'automaton' });
+				info.assigned.add(at.text);
 				p += 3;
 				if (is(']')) p++;
 				if (is(':=') || is('=')) p++;
@@ -449,6 +483,7 @@ function analyzeModel(text) {
 			}
 			if (isName() && is('is', 1) && is('in', 2) && isName(3)) {
 				ref(tok(), { ctx: 'automaton' });
+				info.assigned.add(tok().text);
 				ref(tok(3), { ctx: 'location', automatonName: tok().text });
 				p += 4;
 				continue;
@@ -458,7 +493,18 @@ function analyzeModel(text) {
 		}
 		if (is(';')) p++;
 		sym.end = lastEnd();
+		if (info.end === undefined) info.end = sym.end;
 		folds.push({ start, end: sym.end });
+	}
+
+	// Index of the token closing the bracket opened at token i
+	function matching(i) {
+		let depth = 0;
+		for (let k = i; k < n; k++) {
+			if (tokens[k].text === '(' || tokens[k].text === '[') depth++;
+			else if (tokens[k].text === ')' || tokens[k].text === ']') { depth--; if (depth === 0) return k; }
+		}
+		return -1;
 	}
 
 	function skipToTop() {
@@ -489,9 +535,124 @@ function analyzeModel(text) {
 		p++;
 	}
 
-	/************ Resolution ************/
+	if (init && init.style === 'old')
+		diagnostics.push({ start: init.start, end: init.keywordEnd, severity: 'warning', code: 'deprecated-old-init', message: 'Old `init :=` syntax (before IMITATOR 3.1): use `init := { discrete = …; continuous = …; }`.' });
+	return { kind: 'model', text, tokens, comments, symbols, defs, refs, folds, diagnostics, automata, templates, includes, init };
+}
+
+/*
+ * options.file        : path of `text` (null for an unsaved document)
+ * options.readInclude : (fromFile, includePath) -> {file, text} | null
+ * The result is the analysis of the main file, with the symbol tables merged
+ * over all included files and `units` = [main, included...] (each with .file and .refs).
+ */
+function analyzeModel(text, options = {}) {
+	const main = scanModel(text);
+	main.file = options.file || null;
+	const units = [main];
+	const seen = new Set([main.file]);
+	for (let i = 0; i < units.length; i++) {
+		const u = units[i];
+		for (const inc of u.includes) {
+			const loaded = options.readInclude ? options.readInclude(u.file, inc.file) : null;
+			if (!loaded) {
+				if (options.readInclude)
+					u.diagnostics.push({ start: inc.start, end: inc.end, severity: 'warning', message: `Included file \`${inc.file}\` not found.` });
+				continue;
+			}
+			inc.resolved = loaded.file;
+			if (seen.has(loaded.file)) continue;
+			seen.add(loaded.file);
+			const sub = scanModel(loaded.text);
+			sub.file = loaded.file;
+			units.push(sub);
+		}
+	}
+
+	// Merged tables; the main file wins on duplicates
+	const defs = new Map(), automata = new Map(), templates = new Map();
+	for (const u of units) {
+		for (const [k, sym] of u.defs) { sym.file = u.file; if (!defs.has(k)) defs.set(k, sym); }
+		for (const [k, a] of u.automata) if (!automata.has(k)) automata.set(k, Object.assign(a, { file: u.file }));
+		for (const [k, t] of u.templates) if (!templates.has(k)) templates.set(k, Object.assign(t, { file: u.file }));
+	}
+	for (const u of units) resolve(u, defs, automata, u.diagnostics);
+	const missingInclude = units.some(u => u.includes.some(inc => !inc.resolved));
+	// init sections of included files are merged by IMITATOR (ModelParser.mly, unzip)
+	const assigned = new Set();
+	for (const u of units) if (u.init) for (const a of u.init.assigned) assigned.add(a);
+	let reported = false;
+	for (const u of units) if (u.init) reported = initChecks(u, defs, automata, assigned, missingInclude || reported) || reported;
+	return Object.assign(main, { defs, automata, templates, units });
+}
+
+// View of an included file inside the analysis of a model that includes it:
+// the file's own tokens, references and diagnostics, with the model's symbol tables
+function focusOn(analysis, file) {
+	const unit = analysis.units.find(u => u.file === file);
+	if (!unit || unit === analysis) return null;
+	return Object.assign({}, unit, { defs: analysis.defs, automata: analysis.automata, templates: analysis.templates, units: analysis.units, rootFile: analysis.file });
+}
+
+// First location of an automaton (of its template for an instance)
+function firstLocation(automata, defs, name) {
+	const a = automata.get(name);
+	if (!a) return null;
+	const scope = a.locScope || name;
+	let best = null;
+	for (const sym of defs.values())
+		if (sym.key.startsWith(`loc:${scope}/`) && (!best || (sym.file === best.file && sym.nameStart < best.nameStart))) best = sym;
+	return best ? best.name : null;
+}
+
+// Every automaton needs an initial location (`assigned`: over all files); old syntax converted to the 3.1 syntax
+// Returns true when the missing initial locations were reported in this unit
+function initChecks(unit, defs, automata, assigned, skipMissing) {
+	const info = unit.init;
+	let reported = false;
+	if (info.style === 'new' && !skipMissing) {
+		reported = true;
+		for (const name of automata.keys()) {
+			if (assigned.has(name)) continue;
+			const loc = firstLocation(automata, defs, name) || 'l';
+			const fix = info.discreteAt !== null
+				? { at: info.discreteAt, text: ` loc[${name}] := ${loc},` }
+				: { at: info.braceAt, text: `\n\tdiscrete = loc[${name}] := ${loc};` };
+			unit.diagnostics.push({ start: info.start, end: info.keywordEnd, severity: 'error', code: 'missing-initial-location', fix, automaton: name, message: `No initial location for automaton \`${name}\`: add \`loc[${name}] := …\` to \`discrete\`.` });
+		}
+	}
+	if (info.style === 'old') {
+		const d = unit.diagnostics.find(x => x.code === 'deprecated-old-init');
+		if (d) d.fix = { at: info.start, end: info.end, text: convertOldInit(unit.text, info, defs) };
+	}
+	return reported;
+}
+
+// Old  init := & loc[A] = l & i = 0 & x = 0 & p >= 0;  ->  new  init := { discrete = …; continuous = …; }
+function convertOldInit(text, info, defs) {
+	const discrete = [], continuous = [];
+	const src = toks => text.slice(toks[0].start, toks[toks.length - 1].end).replace(/\s*\n\s*/g, ' ');
+	for (const c of info.conjuncts) {
+		const t = c.map(x => x.text);
+		if (t.length === 6 && t[0] === 'loc' && t[1] === '[' && t[3] === ']' && t[4] === '=')
+			discrete.push(`loc[${t[2]}] := ${t[5]}`);
+		else if (t.length === 4 && t[1] === 'is' && t[2] === 'in')
+			discrete.push(`loc[${t[0]}] := ${t[3]}`);
+		else if (t.length >= 3 && c[0].type === 'name' && t[1] === '=' && defs.has('var:' + t[0]) && defs.get('var:' + t[0]).kind === 'discrete')
+			discrete.push(`${t[0]} := ${src(c.slice(2))}`);
+		else
+			continuous.push(src(c));
+	}
+	let out = 'init := {\n\tdiscrete =\n';
+	out += discrete.map(d => `\t\t${d},\n`).join('');
+	out += '\t;\n';
+	if (continuous.length) out += '\tcontinuous =\n' + continuous.map(c => `\t\t& ${c}\n`).join('') + '\t;\n';
+	return out + '}';
+}
+
+function resolve(unit, defs, automata, diagnostics) {
 	const unresolvedLocations = [];
-	for (const r of refs) {
+	for (const r of unit.refs) {
 		if (r.key) continue;
 		switch (r.ctx) {
 			case 'location': {
@@ -508,8 +669,14 @@ function analyzeModel(text) {
 			}
 			case 'action':
 				r.key = 'act:' + r.name;
-				if (r.info && !r.info.actions.has(r.name))
-					diagnostics.push({ start: r.start, end: r.end, severity: 'error', message: `Action \`${r.name}\` is not declared in the \`actions:\` list of \`${r.automaton}\`.` });
+				if (r.info && !r.info.actions.has(r.name)) {
+					const info = r.info;
+					// Quick fix: append to the `actions:` list, or create one after the header
+					const fix = info.actionsSemicolon !== undefined
+						? { at: info.actionsSemicolon, text: (info.actions.size ? ', ' : '') + r.name }
+						: { at: info.headerEnd, text: `\nactions: ${r.name};` };
+					diagnostics.push({ start: r.start, end: r.end, severity: 'error', code: 'undeclared-action', fix, message: `Action \`${r.name}\` is not declared in the \`actions:\` list of \`${r.automaton}\`.` });
+				}
 				break;
 			case 'automaton':
 				if (defs.has('auto:' + r.name)) r.key = 'auto:' + r.name;
@@ -526,10 +693,14 @@ function analyzeModel(text) {
 			}
 		}
 	}
-	for (const r of unresolvedLocations)
-		diagnostics.push({ start: r.start, end: r.end, severity: 'error', message: `Target location \`${r.name}\` does not exist in \`${r.automaton}\`.` });
-
-	return { kind: 'model', tokens, comments, symbols, defs, refs, folds, diagnostics, automata, templates, includes };
+	for (const r of unresolvedLocations) {
+		const info = unit.automata.get(r.automaton) || unit.templates.get(r.automaton);
+		diagnostics.push({
+			start: r.start, end: r.end, severity: 'error', code: 'unknown-location',
+			fix: info && { at: info.endStart, text: `loc ${r.name}: invariant True\n` },
+			message: `Target location \`${r.name}\` does not exist in \`${r.automaton}\`.`,
+		});
+	}
 }
 
 /************************************************************
@@ -587,7 +758,67 @@ function enclosingFunction(analysis, offset) {
 	return analysis.symbols.find(s => s.kind === 'function' && s.start <= offset && offset <= s.end) || null;
 }
 
+// Index of the last token starting before `offset` (binary search)
+function tokenIndexBefore(tokens, offset) {
+	let lo = 0, hi = tokens.length - 1, res = -1;
+	while (lo <= hi) {
+		const mid = (lo + hi) >> 1;
+		if (tokens[mid].start < offset) { res = mid; lo = mid + 1; } else hi = mid - 1;
+	}
+	return res;
+}
+
+/*
+ * Call around `offset`, for signature help: {name, argIndex, instantiate}
+ * Walks back over the tokens to the unmatched `(` and counts the commas at depth 0.
+ */
+function callAt(analysis, offset) {
+	const tokens = analysis.tokens;
+	let argIndex = 0, depth = 0;
+	for (let i = tokenIndexBefore(tokens, offset); i >= 0; i--) {
+		const t = tokens[i];
+		if (t.type === 'punct') {
+			if (t.text === ')' || t.text === ']' || t.text === '}') depth++;
+			else if (t.text === '[' || t.text === '{') { if (depth === 0) return null; depth--; }
+			else if (t.text === '(') {
+				if (depth > 0) { depth--; continue; }
+				const callee = tokens[i - 1];
+				if (!callee || callee.type !== 'name') return null;
+				const instantiate = tokens[i - 2] && tokens[i - 2].text === ':=' && tokens[i - 4] && tokens[i - 4].text === 'instantiate';
+				return { name: callee.text, argIndex, instantiate };
+			} else if (t.text === ',' && depth === 0) argIndex++;
+			else if (t.text === ';' && depth === 0) return null;
+		} else if (t.type === 'keyword' && depth === 0 && (TOP_KEYWORDS.has(t.text) || t.text === 'when' || t.text === 'goto')) return null;
+	}
+	return null;
+}
+
+// A valid new name: identifier syntax, not a model or property keyword, not a built-in
+function checkNewName(name) {
+	if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(name)) return `\`${name}\` is not a valid IMITATOR name.`;
+	if (MODEL_KEYWORDS.has(name)) return `\`${name}\` is a keyword of the model language.`;
+	if (PROPERTY_KEYWORDS.has(name)) return `\`${name}\` is a keyword of the property language: the property file would not parse.`;
+	if (BUILTINS.has(name)) return `\`${name}\` is a built-in function.`;
+	if (RESERVED.has(name)) return `\`${name}\` is reserved by IMITATOR.`;
+	return null;
+}
+
+// Keys a new name would clash with, for a symbol of key `key`
+function clashKeys(key, newName) {
+	const [kind, rest] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
+	const scope = rest.includes('/') ? rest.slice(0, rest.indexOf('/')) : null;
+	switch (kind) {
+		case 'loc': return [`loc:${scope}/${newName}`];
+		case 'act': return [`act:${newName}`];
+		case 'auto': case 'tpl': return [`auto:${newName}`, `tpl:${newName}`];
+		case 'local': return [`local:${scope}/${newName}`, `var:${newName}`, `fun:${newName}`];
+		case 'tparam': return [`tparam:${scope}/${newName}`, `var:${newName}`, `fun:${newName}`];
+		default: return [`var:${newName}`, `fun:${newName}`];
+	}
+}
+
 module.exports = {
 	MODEL_KEYWORDS, PROPERTY_KEYWORDS, BUILTINS,
-	tokenize, analyzeModel, analyzeProperty, refAt, referencesOf, enclosingAutomaton, enclosingFunction,
+	tokenize, scanModel, analyzeModel, focusOn, analyzeProperty, refAt, referencesOf, enclosingAutomaton, enclosingFunction,
+	callAt, checkNewName, clashKeys,
 };

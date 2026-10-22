@@ -3,3 +3,4 @@ node_modules/
 *.vsix
 development_log.md
 question.md
+test/fixtures/**/*.res

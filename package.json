@@ -1,8 +1,8 @@
 {
 	"name": "imitator-language",
 	"displayName": "IMITATOR Language Support",
-	"description": "Syntax highlighting, snippets, outline, completion, navigation and diagnostics for IMITATOR models (.imi) and properties (.imiprop)",
-	"version": "0.1.0",
+	"description": "Syntax highlighting, snippets, outline, completion, navigation, rename, quick fixes, diagnostics and runs for IMITATOR models (.imi) and properties (.imiprop)",
+	"version": "0.3.0",
 	"publisher": "imitator-model-checker",
 	"license": "GPL-3.0",
 	"repository": {
@@ -78,6 +78,139 @@
 					"type": "boolean",
 					"default": true,
 					"description": "Run `imitator <file> -mode checksyntax` when a model is saved and report its errors and warnings."
+				},
+				"imitator.runArguments": {
+					"type": "array",
+					"items": {
+						"type": "string"
+					},
+					"default": [],
+					"description": "Extra command-line options for `IMITATOR: Run`, e.g. [\"-merge\", \"none\"] or [\"-states-description\"]."
+				},
+				"imitator.showResult": {
+					"type": "string",
+					"enum": [
+						"panel",
+						"file",
+						"both"
+					],
+					"default": "panel",
+					"description": "After `IMITATOR: Run`: show the result in a panel, open the .res file, or both."
+				}
+			}
+		},
+		"commands": [
+			{
+				"command": "imitator.run",
+				"title": "Run IMITATOR (model + property)",
+				"category": "IMITATOR",
+				"icon": "$(play)"
+			},
+			{
+				"command": "imitator.checkSyntax",
+				"title": "Check model syntax",
+				"category": "IMITATOR",
+				"icon": "$(check)"
+			},
+			{
+				"command": "imitator.showResult",
+				"title": "Show last result",
+				"category": "IMITATOR",
+				"icon": "$(output)"
+			}
+		],
+		"menus": {
+			"editor/title": [
+				{
+					"command": "imitator.run",
+					"when": "resourceLangId == imitator || resourceLangId == imitator-property",
+					"group": "navigation"
+				},
+				{
+					"command": "imitator.showResult",
+					"when": "resourceLangId == imitator || resourceLangId == imitator-property",
+					"group": "navigation"
+				}
+			],
+			"commandPalette": [
+				{
+					"command": "imitator.run",
+					"when": "resourceLangId == imitator || resourceLangId == imitator-property"
+				},
+				{
+					"command": "imitator.checkSyntax",
+					"when": "resourceLangId == imitator"
+				},
+				{
+					"command": "imitator.showResult",
+					"when": "resourceLangId == imitator || resourceLangId == imitator-property"
+				}
+			]
+		},
+		"keybindings": [
+			{
+				"command": "imitator.run",
+				"key": "ctrl+f5",
+				"when": "editorLangId == imitator || editorLangId == imitator-property"
+			}
+		],
+		"semanticTokenTypes": [
+			{
+				"id": "clock",
+				"superType": "variable",
+				"description": "IMITATOR clock"
+			},
+			{
+				"id": "modelParameter",
+				"superType": "variable",
+				"description": "IMITATOR parameter (to be synthesized)"
+			},
+			{
+				"id": "discreteVariable",
+				"superType": "variable",
+				"description": "IMITATOR discrete variable (int, rational, bool, …)"
+			}
+		],
+		"semanticTokenScopes": [
+			{
+				"language": "imitator",
+				"scopes": {
+					"clock": [
+						"variable.other.clock.imitator"
+					],
+					"modelParameter": [
+						"variable.other.parameter.imitator"
+					],
+					"discreteVariable": [
+						"variable.other.discrete.imitator"
+					],
+					"variable.readonly": [
+						"variable.other.constant.imitator"
+					]
+				}
+			},
+			{
+				"language": "imitator-property",
+				"scopes": {
+					"discreteVariable": [
+						"variable.other.discrete.imitator"
+					]
+				}
+			}
+		],
+		"configurationDefaults": {
+			"editor.semanticTokenColorCustomizations": {
+				"rules": {
+					"clock": {
+						"foreground": "#D19A66"
+					},
+					"modelParameter": {
+						"foreground": "#C678DD",
+						"bold": true
+					},
+					"discreteVariable": {
+						"foreground": "#2AA198"
+					}
 				}
 			}
 		}

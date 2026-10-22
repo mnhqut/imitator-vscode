@@ -1,6 +1,6 @@
 // Engine regression test on every model of the repository (plain Node, no VS Code):
 //   node test/engine.test.js
-// Expected: no crash, and diagnostics only on the few files IMITATOR itself rejects.
+// Expected: no crash, and errors only on the few files IMITATOR itself rejects.
 const fs = require('fs');
 const path = require('path');
 const engine = require('../src/engine');
@@ -17,21 +17,29 @@ function* walk(dir) {
 	}
 }
 
-let files = 0, failures = 0;
+function readInclude(fromFile, rel) {
+	const file = path.resolve(path.dirname(fromFile), rel);
+	try { return { file, text: fs.readFileSync(file, 'utf8') }; } catch (e) { return null; }
+}
+
+let files = 0, failures = 0, warnings = 0, includes = 0;
 for (const dir of ['benchmarks', 'doc', 'tests']) {
 	if (!fs.existsSync(path.join(root, dir))) continue;
 	for (const f of walk(path.join(root, dir))) {
 		files++;
 		const text = fs.readFileSync(f, 'utf8');
 		let a;
-		try { a = engine.analyzeModel(text); }
+		try { a = engine.analyzeModel(text, { file: f, readInclude }); }
 		catch (e) { failures++; console.log(`CRASH ${f}: ${e.stack}`); continue; }
-		if (a.diagnostics.length && !KNOWN_INVALID.test(f)) {
+		includes += a.units.length - 1;
+		warnings += a.diagnostics.filter(d => d.severity === 'warning').length;
+		const errors = a.diagnostics.filter(d => d.severity === 'error');
+		if (errors.length && !KNOWN_INVALID.test(f)) {
 			failures++;
-			const d = a.diagnostics[0];
+			const d = errors[0];
 			console.log(`FALSE POSITIVE ${path.relative(root, f)}:${text.slice(0, d.start).split('\n').length}: ${d.message}`);
 		}
 	}
 }
-console.log(`${files} models analyzed, ${failures} failures`);
+console.log(`${files} models analyzed, ${includes} included files loaded, ${warnings} warnings (deprecated syntax, missing includes), ${failures} failures`);
 process.exit(failures ? 1 : 0);

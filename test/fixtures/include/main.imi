@@ -1,0 +1,17 @@
+var
+	x : clock;
+	p : parameter;
+
+automaton main_pta
+actions: tick;
+loc idle: invariant x <= p
+	when x = p sync tick do {x := 0} goto idle;
+end
+
+#include "part.imi";
+
+init := {
+	discrete = loc[main_pta] := idle, loc[counter] := zero;
+	continuous = x = 0 & p >= 0;
+}
+end

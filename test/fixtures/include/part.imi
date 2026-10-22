@@ -1,0 +1,7 @@
+automaton counter
+actions: tick;
+loc zero: invariant True
+	when True sync tick goto one;
+loc one: invariant True
+	when True sync tick goto zero;
+end
